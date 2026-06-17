@@ -1,0 +1,42 @@
+FROM alpine:3.20 AS builder
+
+RUN apk add --no-cache \
+    build-base \
+    git \
+    cmake \
+    curl-dev \
+    openssl-dev \
+    ca-certificates \
+    linux-headers
+
+RUN git clone https://github.com/ggerganov/llama.cpp.git /llama.cpp
+WORKDIR /llama.cpp
+
+RUN cmake -B build -DLLAMA_CURL=ON -DLLAMA_OPENSSL=ON -DGGML_CUDA=OFF
+RUN cmake --build build --config Release -j $(nproc)
+
+
+FROM alpine:3.20
+
+RUN apk add --no-cache \
+    libstdc++ \
+    libgcc \
+    libcurl \
+    libcrypto3 \
+    libssl3 \
+    libgomp \
+    ca-certificates
+
+# On prépare le dossier racine des modèles pour n'importe quel UID dynamique
+RUN mkdir -p /models && chmod 777 /models
+
+COPY --from=builder /llama.cpp/build/bin/ /usr/local/bin/
+
+ENV LD_LIBRARY_PATH=/usr/local/bin:$LD_LIBRARY_PATH
+
+WORKDIR /models
+
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/local/bin/llama-server"]
+CMD ["--host", "0.0.0.0", "--port", "8080"]

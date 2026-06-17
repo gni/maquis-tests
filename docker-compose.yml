@@ -1,0 +1,46 @@
+services:
+  # Serveur LLM local (Llama.cpp)
+  llama-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.llamacpp.cpu
+    container_name: llama_cpu
+    # S'exécute avec ton UID/GID exact pour que tu possèdes les fichiers téléchargés
+    user: "${UID:-1000}:${GID:-1000}"
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./models:/models
+    environment:
+      - OMP_NUM_THREADS=4
+      # FORCE le téléchargement Hugging Face à aller dans le volume /models
+      - HF_HOME=/models
+      - HOME=/models
+    command:
+      - "-hf"
+      - "unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q2_K_XL"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8080"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  # Client Agent de code (Maquis)
+  maquis:
+    build:
+      context: .
+      dockerfile: Dockerfile.maquis
+    container_name: maquis_client
+    stdin_open: true 
+    tty: true
+    user: "${UID:-1000}:${GID:-1000}"
+    depends_on:
+      - llama-server
+    volumes:
+      - ./instance/home:/home/maquisuser
+      - ./instance/workspace:/workspace
+    environment:
+      - HOME=/home/maquisuser
+    working_dir: /workspace
